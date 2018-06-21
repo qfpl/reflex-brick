@@ -10,6 +10,7 @@ Portability : non-portable
 {-# LANGUAGE RankNTypes #-}
 module Reflex.Brick (
     runReflexBrickApp
+  , ReflexBrickApp(..)
   , module Reflex.Brick.Types
   , module Reflex.Brick.Events
   ) where
@@ -57,6 +58,25 @@ mkReflexApp initial = do
     app = App _rbWidgets _rbCursorFn process (<$ initial) _rbAttrMap
   pure (events, app)
 
+data ReflexBrickApp t n =
+  ReflexBrickApp {
+    rbaContinue         :: Event t (ReflexBrickAppState n)
+  , rbaSuspendAndResume :: Event t (IO (ReflexBrickAppState n))
+  , rbaHalt             :: Event t ()
+  }
+
+nextEvent :: (Reflex t, MonadHold t m)
+          => ReflexBrickAppState n
+          -> ReflexBrickApp t n
+          -> m (Event t (RBNext (ReflexBrickAppState n)))
+nextEvent i (ReflexBrickApp eC eSR eH) = do
+  dState <- holdDyn i eC
+  pure . leftmost $ [
+      RBHalt <$> current dState <@ eH
+    , RBSuspendAndResume <$> eSR
+    , RBContinue <$> eC
+    ]
+
 rbEventSelector :: Reflex t => Event t (BrickEvent n e) -> EventSelector t (RBEvent n e)
 rbEventSelector =
   fan .
@@ -70,9 +90,8 @@ runReflexBrickApp :: Ord n
                   -> ReflexBrickAppState n
                   -- ^ The initial state of the application
                   -> (forall t m. BasicGuestConstraints t m
-                      => ReflexBrickAppState n
-                      -> EventSelector t (RBEvent n e)
-                      -> BasicGuest t m (Event t (RBNext (ReflexBrickAppState n))))
+                      => EventSelector t (RBEvent n e)
+                      -> BasicGuest t m (ReflexBrickApp t n))
                   -- ^ The FRP network for the application
                   -> IO ()
 runReflexBrickApp initial mGenE initialState fn = do
@@ -96,7 +115,8 @@ runReflexBrickApp initial mGenE initialState fn = do
       e <- takeMVar (rbeToReflex events)
       onEventIn e
 
-    eEventOut <- fn initialState (rbEventSelector eEventIn)
+    rba <- fn (rbEventSelector eEventIn)
+    eEventOut <- nextEvent initialState rba
     performEvent_ $ liftIO . putMVar (rbeFromReflex events) <$> eEventOut
 
     pure ((), eQuit)

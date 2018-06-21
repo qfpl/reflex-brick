@@ -11,6 +11,7 @@ module Reflex.Brick.Types where
 import Control.Lens.TH (makePrisms, makeLenses)
 
 import Brick
+import qualified Graphics.Vty as V
 
 data RBNext s =
     RBContinue s
@@ -27,4 +28,8 @@ data ReflexBrickAppState n =
   }
 
 makeLenses ''ReflexBrickAppState
+
+emptyState :: ReflexBrickAppState n
+emptyState =
+  ReflexBrickAppState [] (const Nothing) (attrMap V.defAttr [])
 
