@@ -67,14 +67,16 @@ data ReflexBrickApp t n =
 
 nextEvent :: (Reflex t, MonadHold t m)
           => ReflexBrickAppState n
+          -> Event t a
           -> ReflexBrickApp t n
           -> m (Event t (RBNext (ReflexBrickAppState n)))
-nextEvent i (ReflexBrickApp eC eSR eH) = do
+nextEvent i eIn (ReflexBrickApp eC eSR eH) = do
   dState <- holdDyn i eC
   pure . leftmost $ [
       RBHalt <$> current dState <@ eH
     , RBSuspendAndResume <$> eSR
     , RBContinue <$> eC
+    , RBContinue <$> current dState <@ eIn
     ]
 
 rbEventSelector :: Reflex t => Event t (BrickEvent n e) -> EventSelector t (RBEvent n e)
@@ -116,7 +118,7 @@ runReflexBrickApp initial mGenE initialState fn = do
       onEventIn e
 
     rba <- fn (rbEventSelector eEventIn)
-    eEventOut <- nextEvent initialState rba
+    eEventOut <- nextEvent initialState eEventIn rba
     performEvent_ $ liftIO . putMVar (rbeFromReflex events) <$> eEventOut
 
     pure ((), eQuit)
