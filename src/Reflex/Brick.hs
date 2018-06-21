@@ -11,6 +11,7 @@ Portability : non-portable
 module Reflex.Brick (
     runReflexBrickApp
   , module Reflex.Brick.Types
+  , module Reflex.Brick.Events
   ) where
 
 import Control.Monad (void, forever)
@@ -28,7 +29,11 @@ import Brick.BChan (newBChan, writeBChan)
 
 import qualified Graphics.Vty as V
 
+import Data.Dependent.Sum (DSum(..))
+import Data.Dependent.Map (singleton)
+
 import Reflex.Brick.Types
+import Reflex.Brick.Events
 
 data ReflexBrickEvents e n =
   ReflexBrickEvents {
@@ -52,6 +57,11 @@ mkReflexApp initial = do
     app = App _rbWidgets _rbCursorFn process (<$ initial) _rbAttrMap
   pure (events, app)
 
+rbEventSelector :: Reflex t => Event t (BrickEvent n e) -> EventSelector t (RBEvent n e)
+rbEventSelector =
+  fan .
+  fmap ((\(k :=> v) -> singleton k v) . brickEventToRBEvent)
+
 runReflexBrickApp :: Ord n
                   => EventM n e
                   -- ^ An initial action to perform
@@ -59,7 +69,10 @@ runReflexBrickApp :: Ord n
                   -- ^ An action which provides values for the custom event
                   -> ReflexBrickAppState n
                   -- ^ The initial state of the application
-                  -> (forall t m. BasicGuestConstraints t m => ReflexBrickAppState n -> Event t (BrickEvent n e) -> BasicGuest t m (Event t (RBNext (ReflexBrickAppState n))))
+                  -> (forall t m. BasicGuestConstraints t m
+                      => ReflexBrickAppState n
+                      -> EventSelector t (RBEvent n e)
+                      -> BasicGuest t m (Event t (RBNext (ReflexBrickAppState n))))
                   -- ^ The FRP network for the application
                   -> IO ()
 runReflexBrickApp initial mGenE initialState fn = do
@@ -83,7 +96,7 @@ runReflexBrickApp initial mGenE initialState fn = do
       e <- takeMVar (rbeToReflex events)
       onEventIn e
 
-    eEventOut <- fn initialState eEventIn
+    eEventOut <- fn initialState (rbEventSelector eEventIn)
     performEvent_ $ liftIO . putMVar (rbeFromReflex events) <$> eEventOut
 
     pure ((), eQuit)

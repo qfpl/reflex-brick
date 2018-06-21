@@ -11,6 +11,7 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Reflex.Brick
                      , Reflex.Brick.Types
+                     , Reflex.Brick.Events
   build-depends:       base >=4.9 && <4.11
                      , reflex
                      , reflex-basic-host
@@ -18,6 +19,9 @@ library
                      , vty
                      , lens
                      , mtl
+                     , bytestring
+                     , dependent-sum
+                     , dependent-map
   ghc-options:         -Wall
   hs-source-dirs:      src
   default-language:    Haskell2010

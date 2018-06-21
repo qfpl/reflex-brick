@@ -1,5 +1,5 @@
-{ mkDerivation, base, brick, lens, mtl, reflex, reflex-basic-host
-, stdenv, stm, vty
+{ mkDerivation, base, brick, bytestring, dependent-map
+, dependent-sum, lens, mtl, reflex, reflex-basic-host, stdenv, vty
 }:
 mkDerivation {
   pname = "reflex-brick";
@@ -8,7 +8,8 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    base brick lens mtl reflex reflex-basic-host stm vty
+    base brick bytestring dependent-map dependent-sum lens mtl reflex
+    reflex-basic-host vty
   ];
   executableHaskellDepends = [ base brick lens mtl reflex vty ];
   license = stdenv.lib.licenses.bsd3;

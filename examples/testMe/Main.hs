@@ -47,24 +47,19 @@ main =
     tick =
       threadDelay 1000000
   in
-    runReflexBrickApp (pure ()) (Just tick) (myStateToAppState initial :: ReflexBrickAppState ()) $ \_ eEvent -> mdo
+    runReflexBrickApp (pure ()) (Just tick) (myStateToAppState initial :: ReflexBrickAppState ()) $ \_ es -> mdo
       dState <- foldDyn ($) initial .
                 mergeWith (.) $ [
                   MyState . succ . _count <$ eTick
                 ]
       let
-        isTick e =
-          e == AppEvent ()
         eTick =
-          ffilter isTick eEvent
-
-        isQuit e =
-          e == VtyEvent (V.EvKey (V.KChar 'q') [])
+          select es RBAppEvent
         eQuit =
-          ffilter isQuit eEvent
+          select es $ RBKey (V.KChar 'q')
 
         eNotQuit =
-          difference eEvent eQuit
+          difference (updated dState) eQuit
 
         dAppState =
           myStateToAppState <$> dState
