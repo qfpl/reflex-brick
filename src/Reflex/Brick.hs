@@ -10,6 +10,7 @@ Portability : non-portable
 {-# LANGUAGE RankNTypes #-}
 module Reflex.Brick (
     runReflexBrickApp
+  , switchReflexBrickApp
   , ReflexBrickApp(..)
   , module Reflex.Brick.Types
   , module Reflex.Brick.Events
@@ -64,6 +65,15 @@ data ReflexBrickApp t n =
   , rbaSuspendAndResume :: Event t (IO (ReflexBrickAppState n))
   , rbaHalt             :: Event t ()
   }
+
+switchReflexBrickApp :: Reflex t
+                     => Dynamic t (ReflexBrickApp t n)
+                     -> ReflexBrickApp t n
+switchReflexBrickApp d =
+  ReflexBrickApp
+    (switchDyn $ rbaContinue <$> d)
+    (switchDyn $ rbaSuspendAndResume <$> d)
+    (switchDyn $ rbaHalt <$> d)
 
 nextEvent :: (Reflex t, MonadHold t m)
           => ReflexBrickAppState n

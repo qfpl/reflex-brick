@@ -32,9 +32,23 @@ executable testMe
                      , reflex
                      , brick
                      , vty
-                     , lens
-                     , mtl
                      , reflex-brick
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   hs-source-dirs:      examples/testMe
+  default-language:    Haskell2010
+
+executable snake
+  main-is:             Main.hs
+  build-depends:       base >=4.9 && <4.11
+                     , reflex
+                     , brick
+                     , vty
+                     , lens
+                     , linear
+                     , containers
+                     , mtl
+                     , random
+                     , reflex-brick
+  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
+  hs-source-dirs:      examples/snake
   default-language:    Haskell2010

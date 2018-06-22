@@ -13,8 +13,6 @@ module Main (
 import Control.Monad (void)
 import Control.Concurrent (threadDelay)
 
-import Control.Lens
-
 import Reflex
 import Reflex.Brick
 
@@ -44,30 +42,28 @@ myStateToAppState (MyState c) =
     ReflexBrickAppState ws (const Nothing) (attrMap V.defAttr [])
 
 main :: IO ()
-main =
+main = do
   let
     initial =
       MyState 0
     tick =
       threadDelay 1000000
-  in
-    runReflexBrickApp (pure ()) (Just tick) (myStateToAppState initial :: ReflexBrickAppState ()) $ \es -> do
-      let
-        eTick =
-          select es RBAppEvent
-        eQuit =
-          select es $ RBKey (V.KChar 'q')
+  runReflexBrickApp (pure ()) (Just tick) (myStateToAppState initial :: ReflexBrickAppState ()) $ \es -> do
+    let
+      eTick =
+        select es RBAppEvent
+      eQuit =
+        select es $ RBKey (V.KChar 'q')
 
-      dState <- foldDyn ($) initial .
-                mergeWith (.) $ [
-                  MyState . succ . _count <$ eTick
-                ]
-      ePostBuild <- getPostBuild
+    dState <- foldDyn ($) initial .
+              mergeWith (.) $ [
+                MyState . succ . _count <$ eTick
+              ]
 
-      let
-        eNotQuit =
-          difference (updated dState) eQuit
-        eOut =
-          myStateToAppState <$> eNotQuit
+    let
+      eNotQuit =
+        difference (updated dState) eQuit
+      eOut =
+        myStateToAppState <$> eNotQuit
 
-      pure $ ReflexBrickApp eOut never (void eQuit)
+    pure $ ReflexBrickApp eOut never (void eQuit)
