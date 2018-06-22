@@ -237,9 +237,7 @@ isAlive es = Workflow $ mdo
 
   dHead <- foldDyn ($) (V2 10 10) $ changePos <$> eMove
 
-  ePostBuild <- getPostBuild
-  let iSnake = Seq.singleton (V2 10 10)
-  dFood <- genFood iSnake $ current dSnake <@ eAtFood
+  let dFood = pure (V2 5 5)
   let
     eAtFood = atFood dHead dFood
 
@@ -269,9 +267,12 @@ isDead es = Workflow $ do
     eQuit = selectQuit es
   pure (ReflexBrickApp (renderState initialState <$ eRestart) never eQuit, isAlive es <$ eRestart)
 
+-- TODO feed this to isAlive
+-- probably also requires random generation then
+-- which is handy, can be used when restarting
 initialState :: OutputState
 initialState =
-  OutputState False 0 (Seq.fromList [V2 7 7]) (V2 5 5)
+  OutputState False 0 (Seq.fromList [V2 10 10]) (V2 5 5)
 
 main :: IO ()
 main = do
