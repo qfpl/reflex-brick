@@ -7,6 +7,7 @@ Portability : non-portable
 -}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Main (
     main
   ) where
@@ -18,7 +19,6 @@ import Control.Concurrent (threadDelay)
 
 import Reflex
 import Reflex.Workflow
-import Reflex.Network
 import Reflex.Brick
 
 import Brick hiding (Direction)
@@ -31,7 +31,7 @@ import Control.Lens hiding (Empty)
 import Linear.V2 (V2(..), _x, _y)
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
-import System.Random (newStdGen, randomR)
+import System.Random (newStdGen, randomR, randomRs)
 
 data OutputState = OutputState
   { _out_dead :: Bool
@@ -192,7 +192,8 @@ checkDirection North South = Nothing
 checkDirection East West = Nothing
 checkDirection South North = Nothing
 checkDirection West East = Nothing
-checkDirection _ d = Just d
+checkDirection x y =
+  if x == y then Nothing else Just y
 
 stopReverse :: (Reflex t, MonadHold t m, MonadFix m)
             => Event t Direction
@@ -202,29 +203,11 @@ stopReverse eDirectionKey = mdo
   dLastDirection <- holdDyn NoDir eDirection
   pure (dLastDirection, eDirection)
 
-genCoord :: MonadIO m => m Coord
-genCoord = do
-  r <- liftIO newStdGen
-  let
-    (x, r') = randomR (1, width) r
-    (y, _) = randomR (1, height) r'
-  pure $ V2 x y
-
-genFood' :: MonadIO m => Seq Coord -> m Coord
-genFood' snake = do
-  c <- genCoord
-  if elem c snake
-  then genFood' snake
-  else pure c
-
-genFood :: (Reflex t, MonadHold t m, MonadFix m, Adjustable t m, MonadIO m) => Seq Coord -> Event t (Seq Coord) -> m (Dynamic t Coord)
-genFood iSnake eSnake = do
-  networkHold (genFood' iSnake) $ genFood' <$> eSnake
-
-isAlive :: (Reflex t, MonadHold t m, MonadFix m, PostBuild t m, Adjustable t m, MonadIO m)
+isAlive :: (Reflex t, MonadHold t m, MonadFix m, PerformEvent t m, MonadIO (Performable m), MonadIO m)
         => EventSelector t (RBEvent Name ())
+        -> OutputState
         -> Workflow t m (ReflexBrickApp t Name)
-isAlive es = Workflow $ mdo
+isAlive es initialState = Workflow $ mdo
   let
     eTick = select es RBAppEvent
     eDirectionKey = selectDirection es
@@ -237,7 +220,13 @@ isAlive es = Workflow $ mdo
 
   dHead <- foldDyn ($) (V2 10 10) $ changePos <$> eMove
 
-  let dFood = pure (V2 5 5)
+  -- coords <- genCoords
+  -- dFoods <- holdDyn (_out_food initialState : coords) eNextFoods
+  -- let eNextFoods = (\sn -> dropWhile (`elem` sn)) <$> current dSnake <*> current dFoods <@ eAtFood
+  -- let dFood = head <$> dFoods
+
+  let dFood = pure (_out_food initialState)
+
   let
     eAtFood = atFood dHead dFood
 
@@ -258,25 +247,45 @@ isAlive es = Workflow $ mdo
 
   pure (ReflexBrickApp eOut never eQuit, isDead es <$ updated dDead)
 
-isDead :: (Reflex t, MonadHold t m, MonadFix m, PostBuild t m, Adjustable t m, MonadIO m)
+isDead :: (Reflex t, MonadHold t m, MonadFix m, PerformEvent t m, MonadIO (Performable m), MonadIO m)
        => EventSelector t (RBEvent Name ())
        -> Workflow t m (ReflexBrickApp t Name)
 isDead es = Workflow $ do
+  initialState <- liftIO mkInitialState
   let
     eRestart = selectRestart es
     eQuit = selectQuit es
-  pure (ReflexBrickApp (renderState initialState <$ eRestart) never eQuit, isAlive es <$ eRestart)
+    eNewState = initialState <$ eRestart
+  pure (ReflexBrickApp (renderState <$> eNewState) never eQuit, isAlive es <$> eNewState)
 
--- TODO feed this to isAlive
--- probably also requires random generation then
--- which is handy, can be used when restarting
-initialState :: OutputState
-initialState =
-  OutputState False 0 (Seq.fromList [V2 10 10]) (V2 5 5)
+genCoord :: MonadIO m => m Coord
+genCoord = do
+  r <- liftIO newStdGen
+  let
+    (x, r') = randomR (1, width) r
+    (y, _) = randomR (1, height) r'
+  pure $ V2 x y
+
+genCoords :: MonadIO m => m [Coord]
+genCoords =
+  liftIO $ zipWith V2 <$> (randomRs (1, width) <$> newStdGen) <*> (randomRs (1, height) <$> newStdGen)
+
+genFood :: MonadIO m => Seq Coord -> m Coord
+genFood snake = do
+  c <- genCoord
+  if elem c snake then genFood snake else pure c
+
+mkInitialState :: MonadIO m => m OutputState
+mkInitialState = do
+  let
+    iSnake = Seq.singleton (V2 10 10)
+  iFood <- genFood iSnake
+  pure $ OutputState False 0 iSnake iFood
 
 main :: IO ()
 main = do
   let
-    tick = threadDelay 1000000
-  runReflexBrickApp (pure ()) (Just tick) (renderState initialState) $
-    fmap switchReflexBrickApp . workflow . isAlive
+    tick = threadDelay 300000
+  initialState <- mkInitialState
+  runReflexBrickApp (pure ()) (Just tick) (renderState initialState) $ \es ->
+    fmap switchReflexBrickApp . workflow . isAlive es $ initialState
