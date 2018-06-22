@@ -220,6 +220,17 @@ isAlive es initialState = Workflow $ mdo
 
   dHead <- foldDyn ($) (V2 10 10) $ changePos <$> eMove
 
+  -- TODO we're going to want a custom host for this
+  -- so that we can make sure that all of our performEvent stuff happens between frames
+  -- and that the return events fire in the same frame as other event processing
+
+  -- for playing with the suspend-and-resume route
+  -- let
+  --   mkFood sn st = do
+  --     f <- genFood sn
+  --     pure . renderState $ st { _out_food = f }
+  --   eNewFood = mkFood <$> current dSnake <*> current dState <@ eAtFood
+
   -- coords <- genCoords
   -- dFoods <- holdDyn (_out_food initialState : coords) eNextFoods
   -- let eNextFoods = (\sn -> dropWhile (`elem` sn)) <$> current dSnake <*> current dFoods <@ eAtFood
