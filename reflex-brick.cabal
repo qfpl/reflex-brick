@@ -12,26 +12,26 @@ library
   exposed-modules:     Reflex.Brick
                      , Reflex.Brick.Types
                      , Reflex.Brick.Events
-  build-depends:       base >=4.9 && <4.11
-                     , reflex
-                     , reflex-basic-host
-                     , brick
-                     , vty
-                     , lens
-                     , mtl
-                     , bytestring
-                     , dependent-sum
-                     , dependent-map
+  build-depends:       base              >=4.9 && <4.13
+                     , brick             >= 0.37 && < 0.42
+                     , bytestring        >= 0.10 && < 0.11
+                     , dependent-map     >= 0.2.4 && < 0.3
+                     , dependent-sum     >= 0.4 && < 0.5
+                     , lens              >= 4.16 && < 4.18
+                     , mtl               >= 2.2 && < 2.3
+                     , reflex            >= 0.5 && < 0.6
+                     , reflex-basic-host >= 0.1 && < 0.2
+                     , vty               >= 5.21 && < 5.25
   ghc-options:         -Wall
   hs-source-dirs:      src
   default-language:    Haskell2010
 
 executable testMe
   main-is:             Main.hs
-  build-depends:       base >=4.9 && <4.11
-                     , reflex
-                     , brick
-                     , vty
+  build-depends:       base >=4.9 && <4.13
+                     , brick             >= 0.37 && < 0.42
+                     , reflex            >= 0.5 && < 0.6
+                     , vty               >= 5.21 && < 5.25
                      , reflex-brick
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   hs-source-dirs:      examples/testMe
@@ -39,15 +39,15 @@ executable testMe
 
 executable snake
   main-is:             Main.hs
-  build-depends:       base >=4.9 && <4.11
-                     , reflex
-                     , brick
-                     , vty
-                     , lens
-                     , linear
-                     , containers
-                     , mtl
-                     , random
+  build-depends:       base >=4.9 && <4.13
+                     , brick             >= 0.37 && < 0.42
+                     , containers        >= 0.5 && < 0.7
+                     , lens              >= 4.16 && < 4.18
+                     , linear            >= 1.20 && < 1.21
+                     , mtl               >= 2.2 && < 2.3
+                     , random            >= 1.1 && < 1.2
+                     , reflex            >= 0.5 && < 0.6
+                     , vty               >= 5.21 && < 5.25
                      , reflex-brick
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   hs-source-dirs:      examples/snake
