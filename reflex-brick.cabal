@@ -13,7 +13,7 @@ library
                      , Reflex.Brick.Types
                      , Reflex.Brick.Events
   build-depends:       base              >=4.9 && <4.13
-                     , brick             >= 0.37 && < 0.42
+                     , brick             >= 0.37 && < 0.47
                      , bytestring        >= 0.10 && < 0.11
                      , dependent-map     >= 0.2.4 && < 0.3
                      , dependent-sum     >= 0.4 && < 0.5
@@ -29,7 +29,7 @@ library
 executable testMe
   main-is:             Main.hs
   build-depends:       base >=4.9 && <4.13
-                     , brick             >= 0.37 && < 0.42
+                     , brick             >= 0.37 && < 0.47
                      , reflex            >= 0.5 && < 0.6
                      , vty               >= 5.21 && < 5.25
                      , reflex-brick
@@ -40,7 +40,7 @@ executable testMe
 executable snake
   main-is:             Main.hs
   build-depends:       base >=4.9 && <4.13
-                     , brick             >= 0.37 && < 0.42
+                     , brick             >= 0.37 && < 0.47
                      , containers        >= 0.5 && < 0.7
                      , lens              >= 4.16 && < 4.18
                      , linear            >= 1.20 && < 1.21
