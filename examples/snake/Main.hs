@@ -8,6 +8,7 @@ Portability : non-portable
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 module Main (
     main
@@ -178,13 +179,19 @@ checkDirection West East = Nothing
 checkDirection x y =
   if x == y then Nothing else Just y
 
-mkMove :: Reflex t
-       => Event t Direction
-       -> Dynamic t Direction
-       -> (Event t Direction)
-mkMove eDirectionKey dDir =
-  fmapMaybe id $
-  checkDirection <$> current dDir <@> eDirectionKey
+mkMove ::
+  forall t m.
+  (Reflex t, MonadHold t m) =>
+  Event t () ->
+  Event t Direction ->
+  Dynamic t Direction ->
+  m (Event t Direction)
+mkMove eTick eDirectionKey dDir = do
+  bCanChange <- hold True $ leftmost [False <$ eDirectionKey, True <$ eTick]
+  pure . fmapMaybe id $
+    checkDirection <$>
+    current dDir <@>
+    gate bCanChange eDirectionKey
 
 changePos :: Direction
           -> Coord
@@ -263,7 +270,7 @@ isAlive es eTick initialState = Workflow $ do
     eQuit = selectQuit es
 
   rec
-    let eMove = mkMove eDirectionKey dDir
+    eMove <- mkMove eTick eDirectionKey dDir
     dDir <- holdDyn NoDir eMove
   dHead <- mkHead eTick dDir
 
