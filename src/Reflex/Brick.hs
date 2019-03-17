@@ -17,20 +17,22 @@ module Reflex.Brick (
   ) where
 
 import Control.Monad (void, forever)
-import Data.Maybe (fromMaybe)
 
-import Control.Monad.Trans (liftIO)
-import Control.Concurrent (forkIO, MVar, newEmptyMVar, putMVar, takeMVar)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Concurrent (forkIO, MVar, newEmptyMVar, putMVar, takeMVar, tryTakeMVar)
+import Control.Concurrent.STM (atomically)
+import Control.Concurrent.STM.TVar (TVar, newTVarIO, readTVarIO, writeTVar)
 
 import Reflex
 import Reflex.Host.Basic
 
-import Brick.Types (BrickEvent, EventM)
+import Brick.Types (BrickEvent(..), EventM)
 import Brick.Main (App(..), customMain, continue, halt, suspendAndResume)
 import Brick.BChan (newBChan, writeBChan)
 
 import qualified Graphics.Vty as V
 
+import Data.Functor ((<&>))
 import Data.Dependent.Sum (DSum(..))
 import Data.Dependent.Map (singleton)
 
@@ -43,25 +45,36 @@ data ReflexBrickEvents e n =
   , rbeFromReflex :: MVar (RBNext (ReflexBrickAppState n))
   }
 
-mkReflexApp :: EventM n e -> IO (ReflexBrickEvents e n, App (ReflexBrickAppState n) e n)
-mkReflexApp initial = do
-  (toReflex, fromReflex) <- (,) <$> newEmptyMVar <*> newEmptyMVar
+mkReflexApp ::
+  MonadIO m =>
+  EventM n e ->
+  TVar (ReflexBrickAppState n) ->
+  m (ReflexBrickEvents e n, App (ReflexBrickAppState n) (Maybe e) n)
+mkReflexApp initial state = do
+  (toReflex, fromReflex) <- liftIO $ (,) <$> newEmptyMVar <*> newEmptyMVar
   let
+    process _ (AppEvent Nothing) = liftIO (readTVarIO state) >>= continue
     process _ e = do
       x <- liftIO $ do
-        putMVar toReflex e
-        takeMVar fromReflex
+        putMVar toReflex $
+          case e of
+            AppEvent (Just a) -> AppEvent a
+            AppEvent Nothing -> error "impossible"
+            VtyEvent a -> VtyEvent a
+            MouseDown a b c d -> MouseDown a b c d
+            MouseUp a b c -> MouseUp a b c
+        tryTakeMVar fromReflex
       case x of
-        RBContinue s -> continue s
-        RBHalt s -> halt s
-        RBSuspendAndResume s -> suspendAndResume s
+        Nothing -> liftIO (readTVarIO state) >>= continue
+        Just (RBHalt s) -> halt s
+        Just (RBSuspendAndResume s) -> suspendAndResume s
     events = ReflexBrickEvents toReflex fromReflex
     app = App _rbWidgets _rbCursorFn process (<$ initial) _rbAttrMap
   pure (events, app)
 
-data ReflexBrickApp t n =
-  ReflexBrickApp {
-    rbaContinue         :: Event t (ReflexBrickAppState n)
+data ReflexBrickApp t n
+  = ReflexBrickApp
+  { rbaAppState         :: Dynamic t (ReflexBrickAppState n)
   , rbaSuspendAndResume :: Event t (IO (ReflexBrickAppState n))
   , rbaHalt             :: Event t ()
   }
@@ -71,23 +84,19 @@ switchReflexBrickApp :: Reflex t
                      -> ReflexBrickApp t n
 switchReflexBrickApp d =
   ReflexBrickApp
-    (switchDyn $ rbaContinue <$> d)
+    (d >>= rbaAppState)
     (switchDyn $ rbaSuspendAndResume <$> d)
     (switchDyn $ rbaHalt <$> d)
 
-nextEvent :: (Reflex t, MonadHold t m)
-          => ReflexBrickAppState n
-          -> Event t a
-          -> ReflexBrickApp t n
-          -> m (Event t (RBNext (ReflexBrickAppState n)))
-nextEvent i eIn (ReflexBrickApp eC eSR eH) = do
-  dState <- holdDyn i eC
-  pure . leftmost $ [
-      RBHalt <$> current dState <@ eH
-    , RBSuspendAndResume <$> eSR
-    , RBContinue <$> eC
-    , RBContinue <$> current dState <@ eIn
-    ]
+nextEvent
+  :: Reflex t
+  => ReflexBrickApp t n
+  -> Event t (RBNext (ReflexBrickAppState n))
+nextEvent (ReflexBrickApp dState eSR eH) =
+  leftmost
+  [ RBHalt <$> current dState <@ eH
+  , RBSuspendAndResume <$> eSR
+  ]
 
 rbEventSelector :: Reflex t => Event t (BrickEvent n e) -> EventSelector t (RBEvent n e)
 rbEventSelector =
@@ -99,36 +108,42 @@ runReflexBrickApp :: Ord n
                   -- ^ An initial action to perform
                   -> Maybe (IO e)
                   -- ^ An action which provides values for the custom event
-                  -> ReflexBrickAppState n
-                  -- ^ The initial state of the application
                   -> (forall t m. BasicGuestConstraints t m
                       => EventSelector t (RBEvent n e)
                       -> BasicGuest t m (ReflexBrickApp t n))
                   -- ^ The FRP network for the application
                   -> IO ()
-runReflexBrickApp initial mGenE initialState fn = do
-  (events, app) <- mkReflexApp initial
+runReflexBrickApp initial mGenE fn = do
   basicHostWithQuit $ do
     (eQuit, onQuit) <- newTriggerEvent
     (eEventIn, onEventIn) <- newTriggerEvent
-    mbChan <- fromMaybe (pure Nothing) $ (fmap Just . liftIO . newBChan $ 1) <$ mGenE
+    bChan <- liftIO $ newBChan 1
+    case mGenE of
+      Nothing -> pure ()
+      Just genE -> do
+        e <- liftIO genE
+        liftIO . writeBChan bChan $ Just e
 
-    void . liftIO . forkIO $ do
-      void $ customMain (V.mkVty V.defaultConfig) mbChan app initialState
-      onQuit ()
+    rba <- fn (rbEventSelector eEventIn)
+    initialState <- sample $ current (rbaAppState rba)
+    stateVar <- liftIO $ newTVarIO initialState
+    performEvent_ $
+      updated (rbaAppState rba) <&> \s ->
+      liftIO $ do
+        () <- atomically $ writeTVar stateVar s
+        writeBChan bChan Nothing
 
-    let
-      generate bChan genE = void . liftIO . forkIO . forever $ do
-        e <- genE
-        writeBChan bChan e
-    fromMaybe (pure ()) $ generate <$> mbChan <*> mGenE
+    (events, app) <- mkReflexApp initial stateVar
 
     void . liftIO . forkIO . forever $ do
       e <- takeMVar (rbeToReflex events)
       onEventIn e
 
-    rba <- fn (rbEventSelector eEventIn)
-    eEventOut <- nextEvent initialState eEventIn rba
+    void . liftIO . forkIO $ do
+      void $ customMain (V.mkVty V.defaultConfig) (Just bChan) app initialState
+      onQuit ()
+
+    let eEventOut = nextEvent rba
     performEvent_ $ liftIO . putMVar (rbeFromReflex events) <$> eEventOut
 
     pure ((), eQuit)

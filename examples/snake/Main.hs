@@ -8,6 +8,7 @@ Portability : non-portable
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
 module Main (
     main
   ) where
@@ -15,7 +16,7 @@ module Main (
 import Control.Monad (void)
 import Control.Monad.Trans (MonadIO(..))
 import Control.Monad.Fix (MonadFix)
-import Control.Concurrent (threadDelay)
+import Control.Concurrent (forkIO, threadDelay)
 import Data.Bool (bool)
 
 import Reflex
@@ -177,14 +178,13 @@ checkDirection West East = Nothing
 checkDirection x y =
   if x == y then Nothing else Just y
 
-mkMove :: (Reflex t, MonadFix m, MonadHold t m)
+mkMove :: Reflex t
        => Event t Direction
-       -> Event t ()
-       -> m (Event t Direction)
-mkMove eDirectionKey eTick = mdo
-  let eDirection = fmapMaybe id $ checkDirection <$> current dLastDirection <@> eDirectionKey
-  dLastDirection <- holdDyn NoDir eDirection
-  pure $ leftmost [eDirection, current dLastDirection <@ eTick]
+       -> Dynamic t Direction
+       -> (Event t Direction)
+mkMove eDirectionKey dDir =
+  fmapMaybe id $
+  checkDirection <$> current dDir <@> eDirectionKey
 
 changePos :: Direction
           -> Coord
@@ -195,24 +195,26 @@ changePos South = over _y pred
 changePos West = over _x pred
 changePos NoDir = id
 
-mkHead :: (Reflex t, MonadFix m, MonadHold t m)
-       => Event t Direction
-       -> m (Dynamic t Coord)
-mkHead eMove =
-  foldDyn ($) (V2 10 10) $ changePos <$> eMove
+mkHead ::
+  (Reflex t, MonadFix m, MonadHold t m) =>
+  Event t () ->
+  Dynamic t Direction ->
+  m (Dynamic t Coord)
+mkHead eTick dDir =
+  foldDyn ($) (V2 10 10) $ changePos <$> current dDir <@ eTick
 
 mkTail :: (Reflex t, MonadFix m, MonadHold t m)
        => Dynamic t Bool
        -> Dynamic t Coord
-       -> Event t Direction
+       -> Event t ()
        -> m (Dynamic t (Seq Coord))
-mkTail dAtFood dHead eMove =
+mkTail dAtFood dHead eTick =
   let
     grow b h t =
       bool (Seq.take (Seq.length t)) id b $ h Seq.<| t
   in
     foldDyn ($) mempty $
-      grow <$> current dAtFood <*> current dHead <@ eMove
+      grow <$> current dAtFood <*> current dHead <@ eTick
 
 mkAtFood :: Reflex t
          => Dynamic t Coord
@@ -249,18 +251,21 @@ mkDead dPos dTail =
   in
     holdDyn False . ffilter id . updated $ (||) <$> dDeadTail <*> dDeadEdge
 
-isAlive :: (Reflex t, MonadHold t m, MonadFix m, PerformEvent t m, MonadIO (Performable m), MonadIO m)
-        => EventSelector t (RBEvent Name ())
-        -> OutputState
-        -> Workflow t m (ReflexBrickApp t Name)
-isAlive es initialState = Workflow $ do
+isAlive ::
+  (Reflex t, MonadHold t m, MonadFix m, PerformEvent t m, MonadIO (Performable m), MonadIO m) =>
+  EventSelector t (RBEvent Name ()) ->
+  Event t () -> -- ^ Tick event
+  OutputState ->
+  Workflow t m (ReflexBrickApp t Name)
+isAlive es eTick initialState = Workflow $ do
   let
-    eTick = select es RBAppEvent
     eDirectionKey = selectDirection es
     eQuit = selectQuit es
 
-  eMove <- mkMove eDirectionKey eTick
-  dHead <- mkHead eMove
+  rec
+    let eMove = mkMove eDirectionKey dDir
+    dDir <- holdDyn NoDir eMove
+  dHead <- mkHead eTick dDir
 
   rec
     let
@@ -268,32 +273,43 @@ isAlive es initialState = Workflow $ do
     dFood <- mkFood (_out_food initialState) eAtFood
   dAtFood <- holdDyn False eAtFood
 
-  dTail <- mkTail dAtFood dHead eMove
+  dTail <- mkTail dAtFood dHead eTick
   dDead <- mkDead dHead dTail
   dScore <- mkScore eAtFood
 
   let
     dSnake = (Seq.<|) <$> dHead <*> dTail
     dState = OutputState <$> dDead <*> dScore <*> dSnake <*> dFood
-    eOut = renderState <$> updated dState
 
-  pure (ReflexBrickApp eOut never eQuit, isDead es <$ updated dDead)
+  pure
+    ( ReflexBrickApp (renderState <$> dState) never eQuit
+    , isDead es eTick <$ updated dDead
+    )
 
-isDead :: (Reflex t, MonadHold t m, MonadFix m, PerformEvent t m, MonadIO (Performable m), MonadIO m)
-       => EventSelector t (RBEvent Name ())
-       -> Workflow t m (ReflexBrickApp t Name)
-isDead es = Workflow $ do
+isDead ::
+  (Reflex t, MonadHold t m, MonadFix m, PerformEvent t m, MonadIO (Performable m), MonadIO m) =>
+  EventSelector t (RBEvent Name ()) ->
+  Event t () ->
+  Workflow t m (ReflexBrickApp t Name)
+isDead es eTick = Workflow $ do
   initialState <- mkInitialState
   let
     eRestart = selectRestart es
     eQuit = selectQuit es
-    eNewState = initialState <$ eRestart
-  pure (ReflexBrickApp (renderState <$> eNewState) never eQuit, isAlive es <$> eNewState)
+  pure
+    ( ReflexBrickApp (pure $ renderState initialState) never eQuit
+    , isAlive es eTick initialState <$ eRestart
+    )
 
 main :: IO ()
 main = do
-  let
-    tick = threadDelay 300000
   initialState <- mkInitialState
-  runReflexBrickApp (pure ()) (Just tick) (renderState initialState) $ \es ->
-    fmap switchReflexBrickApp . workflow . isAlive es $ initialState
+  runReflexBrickApp @() (pure ()) Nothing $ \es -> do
+    (eTick, runTick) <- newTriggerEvent
+    let
+      ticking = do
+        runTick ()
+        threadDelay 300000
+        ticking
+    _ <- liftIO $ forkIO ticking
+    switchReflexBrickApp <$> workflow (isAlive es eTick initialState)
