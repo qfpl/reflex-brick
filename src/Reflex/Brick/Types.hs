@@ -14,7 +14,8 @@ import Brick
 import qualified Graphics.Vty as V
 
 data RBNext s
-  = RBHalt s
+  = RBContinue
+  | RBHalt
   | RBSuspendAndResume (IO s)
 
 makePrisms ''RBNext
