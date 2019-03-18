@@ -6,12 +6,14 @@ Stability   : experimental
 Portability : non-portable
 -}
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE TypeApplications #-}
 module Main (
     main
   ) where
 
-import Control.Monad (void)
-import Control.Concurrent (threadDelay)
+import Control.Monad (void, forever)
+import Control.Monad.IO.Class (liftIO)
+import Control.Concurrent (forkIO, threadDelay)
 
 import Reflex
 import Reflex.Brick
@@ -42,28 +44,19 @@ myStateToAppState (MyState c) =
     ReflexBrickAppState ws (const Nothing) (attrMap V.defAttr [])
 
 main :: IO ()
-main = do
-  let
-    initial =
-      MyState 0
-    tick =
-      threadDelay 1000000
-  runReflexBrickApp (pure ()) (Just tick) (myStateToAppState initial :: ReflexBrickAppState ()) $ \es -> do
-    let
-      eTick =
-        select es RBAppEvent
-      eQuit =
-        select es $ RBKey (V.KChar 'q')
+main =
+  runReflexBrickApp @() (pure ()) Nothing $ \es -> do
+    (eTick, runTick) <- newTriggerEvent
 
-    dState <- foldDyn ($) initial .
-              mergeWith (.) $ [
-                MyState . succ . _count <$ eTick
-              ]
+    let eQuit = select es $ RBKey (V.KChar 'q')
 
-    let
-      eNotQuit =
-        difference (updated dState) eQuit
-      eOut =
-        myStateToAppState <$> eNotQuit
+    dState <-
+      foldDyn ($) (MyState 0) $
+      mergeWith (.) [ MyState . succ . _count <$ eTick ]
 
-    pure $ ReflexBrickApp eOut never (void eQuit)
+    _ <-
+      liftIO . forkIO . forever $ do
+        threadDelay 1000000
+        runTick ()
+
+    pure $ ReflexBrickApp (myStateToAppState <$> dState) never (void eQuit)
