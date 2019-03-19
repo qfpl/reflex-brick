@@ -10,6 +10,11 @@ cabal-version:       >=1.10
 category:            FRP
 synopsis:            Integrating reflex and brick
 description:         Integrating reflex and brick.
+tested-with:         GHC == 8.0.2
+                   , GHC == 8.2.2
+                   , GHC == 8.4.4
+                   , GHC == 8.6.4
+
 
 source-repository    head
   type:              git
