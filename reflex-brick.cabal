@@ -7,6 +7,13 @@ maintainer:          dave.laing.80@gmail.com
 build-type:          Simple
 extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
+category:            FRP
+synopsis:            Integrating reflex and brick
+description:         Integrating reflex and brick.
+
+source-repository    head
+  type:              git
+  location:          git@github.com:qfpl/reflex-brick.git
 
 library
   exposed-modules:     Reflex.Brick
