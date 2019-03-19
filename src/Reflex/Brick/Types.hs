@@ -13,9 +13,9 @@ import Control.Lens.TH (makePrisms, makeLenses)
 import Brick
 import qualified Graphics.Vty as V
 
-data RBNext s =
-    RBContinue s
-  | RBHalt s
+data RBNext s
+  = RBContinue
+  | RBHalt
   | RBSuspendAndResume (IO s)
 
 makePrisms ''RBNext

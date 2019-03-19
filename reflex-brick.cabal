@@ -21,6 +21,7 @@ library
                      , mtl               >= 2.2 && < 2.3
                      , reflex            >= 0.5 && < 0.6
                      , reflex-basic-host >= 0.1 && < 0.2
+                     , stm               >= 2.5 && < 2.6
                      , vty               >= 5.21 && < 5.25
   ghc-options:         -Wall
   hs-source-dirs:      src
