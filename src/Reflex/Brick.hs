@@ -32,7 +32,6 @@ import Brick.BChan (newBChan, writeBChan)
 
 import qualified Graphics.Vty as V
 
-import Data.Functor ((<&>))
 import Data.Dependent.Sum (DSum(..))
 import Data.Dependent.Map (singleton)
 
@@ -115,6 +114,7 @@ runReflexBrickApp initial mGenE fn = do
     rba <- fn (rbEventSelector eEventIn)
     initialState <- sample $ current (rbaAppState rba)
     stateVar <- liftIO $ newTVarIO initialState
+    let (<&>) = flip fmap
     performEvent_ $
       updated (rbaAppState rba) <&> \s ->
       liftIO $ do

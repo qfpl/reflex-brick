@@ -7,6 +7,18 @@ maintainer:          dave.laing.80@gmail.com
 build-type:          Simple
 extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
+category:            FRP
+synopsis:            Integrating reflex and brick
+description:         Integrating reflex and brick.
+tested-with:         GHC == 8.0.2
+                   , GHC == 8.2.2
+                   , GHC == 8.4.4
+                   , GHC == 8.6.4
+
+
+source-repository    head
+  type:              git
+  location:          git@github.com:qfpl/reflex-brick.git
 
 library
   exposed-modules:     Reflex.Brick
@@ -22,7 +34,7 @@ library
                      , reflex            >= 0.5 && < 0.6
                      , reflex-basic-host >= 0.1 && < 0.2
                      , stm               >= 2.5 && < 2.6
-                     , vty               >= 5.21 && < 5.25
+                     , vty               >= 5.21 && < 5.26
   ghc-options:         -Wall
   hs-source-dirs:      src
   default-language:    Haskell2010
@@ -32,7 +44,7 @@ executable testMe
   build-depends:       base >=4.9 && <4.13
                      , brick             >= 0.37 && < 0.47
                      , reflex            >= 0.5 && < 0.6
-                     , vty               >= 5.21 && < 5.25
+                     , vty               >= 5.21 && < 5.26
                      , reflex-brick
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   hs-source-dirs:      examples/testMe
@@ -48,7 +60,7 @@ executable snake
                      , mtl               >= 2.2 && < 2.3
                      , random            >= 1.1 && < 1.2
                      , reflex            >= 0.5 && < 0.6
-                     , vty               >= 5.21 && < 5.25
+                     , vty               >= 5.21 && < 5.26
                      , reflex-brick
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   hs-source-dirs:      examples/snake
