@@ -17,6 +17,7 @@ library
                      , bytestring        >= 0.10 && < 0.11
                      , dependent-map     >= 0.2.4 && < 0.3
                      , dependent-sum     >= 0.4 && < 0.5
+                     , dependent-sum-template >= 0.0 && < 0.1
                      , lens              >= 4.16 && < 4.18
                      , mtl               >= 2.2 && < 2.3
                      , reflex            >= 0.5 && < 0.6
@@ -52,4 +53,21 @@ executable snake
                      , reflex-brick
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   hs-source-dirs:      examples/snake
+  default-language:    Haskell2010
+
+executable forms
+  main-is:             Main.hs
+  build-depends:       base >=4.9 && <4.13
+                     , brick             >= 0.37 && < 0.47
+                     , reflex            >= 0.5 && < 0.6
+                     , reflex-brick
+                     , microlens
+                     , microlens-th
+                     , mtl
+                     , text
+                     , text-zipper
+                     , transformers
+                     , vty
+  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
+  hs-source-dirs:      examples/forms
   default-language:    Haskell2010

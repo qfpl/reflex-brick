@@ -5,6 +5,7 @@ Maintainer  : dave.laing.80@gmail.com
 Stability   : experimental
 Portability : non-portable
 -}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
@@ -33,8 +34,6 @@ import Brick.BChan (newBChan, writeBChan)
 import qualified Graphics.Vty as V
 
 import Data.Functor ((<&>))
-import Data.Dependent.Sum (DSum(..))
-import Data.Dependent.Map (singleton)
 
 import Reflex.Brick.Types
 import Reflex.Brick.Events
@@ -87,20 +86,17 @@ switchReflexBrickApp d =
     (switchDyn $ rbaHalt <$> d)
 
 rbEventSelector :: Reflex t => Event t (BrickEvent n e) -> EventSelector t (RBEvent n e)
-rbEventSelector =
-  fan .
-  fmap ((\(k :=> v) -> singleton k v) . brickEventToRBEvent)
+rbEventSelector = fan . fmap brickEventToRBEvent
 
-runReflexBrickApp :: Ord n
-                  => EventM n e
-                  -- ^ An initial action to perform
-                  -> Maybe (IO e)
-                  -- ^ An action which provides values for the custom event
-                  -> (forall t m. BasicGuestConstraints t m
-                      => EventSelector t (RBEvent n e)
-                      -> BasicGuest t m (ReflexBrickApp t n))
-                  -- ^ The FRP network for the application
-                  -> IO ()
+runReflexBrickApp ::
+  Ord n =>
+  EventM n e -> -- ^ An initial action to perform
+  Maybe (IO e) -> -- ^ An action which provides values for the custom event
+  (forall t m.
+   (BasicGuestConstraints t m) =>
+   EventSelector t (RBEvent n e) ->
+   BasicGuest t m (ReflexBrickApp t n)) -> -- ^ The FRP network for the application
+  IO ()
 runReflexBrickApp initial mGenE fn = do
   basicHostWithQuit $ do
     (eQuit, onQuit) <- newTriggerEvent
@@ -113,6 +109,7 @@ runReflexBrickApp initial mGenE fn = do
         liftIO . writeBChan bChan $ Right e
 
     rba <- fn (rbEventSelector eEventIn)
+
     initialState <- sample $ current (rbaAppState rba)
     stateVar <- liftIO $ newTVarIO initialState
     performEvent_ $

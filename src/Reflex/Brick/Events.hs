@@ -6,8 +6,10 @@ Stability   : experimental
 Portability : non-portable
 -}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Reflex.Brick.Events (
     RBEvent(..)
+  , RBVtyEvent(..)
   , MouseData(..)
   , brickEventToRBEvent
   ) where
@@ -17,11 +19,17 @@ import Data.Functor.Identity (Identity(..))
 import Brick.Types (BrickEvent(..), Location(..))
 import Graphics.Vty.Input.Events
 
-import Data.Dependent.Sum (DSum(..))
-import Data.GADT.Compare
-import Data.GADT.Show
+import Data.Dependent.Map (DMap)
+import Data.Dependent.Sum (DSum, (==>))
+import Data.GADT.Compare (GEq(..), GCompare(..), GOrdering(..), (:~:)(..))
+import Data.GADT.Compare.TH (deriveGEq, deriveGCompare)
+import Data.GADT.Show (GShow(..))
+import Data.GADT.Show.TH (deriveGShow)
+
+import qualified Data.Dependent.Map as DMap
 
 import Data.ByteString (ByteString)
+import Text.Show (showParen)
 
 data MouseData n =
   MouseData {
@@ -30,26 +38,29 @@ data MouseData n =
   , _mdLocation :: Location
   }
 
+data RBVtyEvent a where
+  RBAnyKey :: RBVtyEvent (Key, [Modifier])
+  RBKey :: Key -> RBVtyEvent [Modifier]
+  RBResize :: RBVtyEvent Location
+  RBPaste :: RBVtyEvent ByteString
+
+deriveGEq ''RBVtyEvent
+deriveGCompare ''RBVtyEvent
+deriveGShow ''RBVtyEvent
+
 data RBEvent n e a where
   RBAppEvent :: RBEvent n e e
-  RBKey :: Key -> RBEvent n e [Modifier]
-  RBResize :: RBEvent n e Location
-  RBPaste :: RBEvent n e ByteString
-  -- RBFocus :: RBEvent n e Bool
+  RBAnyVtyEvent :: RBEvent n e (DMap RBVtyEvent Identity)
+  RBVtyEvent :: RBVtyEvent a -> RBEvent n e a
   RBMouseDown :: Button -> RBEvent n e (MouseData n)
   RBMouseUp :: Maybe Button -> RBEvent n e (MouseData n)
+  -- RBFocus :: RBEvent n e Bool
 
 instance GEq (RBEvent n e) where
   geq RBAppEvent RBAppEvent =
     Just Refl
-  geq (RBKey k1) (RBKey k2) =
-    if k1 == k2 then Just Refl else Nothing
-  geq RBResize RBResize =
-    Just Refl
-  geq RBPaste RBPaste =
-    Just Refl
-  -- geq RBFocus RBFocus =
-  --   Just Refl
+  geq RBAnyVtyEvent RBAnyVtyEvent = Just Refl
+  geq (RBVtyEvent a) (RBVtyEvent b) = geq a b
   geq (RBMouseDown b1) (RBMouseDown b2) =
     if b1 == b2 then Just Refl else Nothing
   geq (RBMouseUp mb1) (RBMouseUp mb2) =
@@ -61,72 +72,88 @@ instance GCompare (RBEvent n e) where
   gcompare RBAppEvent RBAppEvent = GEQ
   gcompare RBAppEvent _ = GLT
   gcompare _ RBAppEvent = GGT
-  gcompare (RBKey k1) (RBKey k2) =
-    case compare k1 k2 of
-      EQ -> GEQ
+  gcompare RBAnyVtyEvent RBAnyVtyEvent = GEQ
+  gcompare RBAnyVtyEvent _ = GLT
+  gcompare _ RBAnyVtyEvent = GGT
+  gcompare (RBVtyEvent a) (RBVtyEvent b) = gcompare a b
+  gcompare RBVtyEvent{} _ = GLT
+  gcompare RBMouseDown{} RBVtyEvent{} = GGT
+  gcompare (RBMouseDown a) (RBMouseDown b) =
+    case compare a b of
       LT -> GLT
+      EQ -> GEQ
       GT -> GGT
-  gcompare (RBKey _) _ = GLT
-  gcompare _ (RBKey _) = GGT
-  gcompare RBResize RBResize = GEQ
-  gcompare RBResize _ = GLT
-  gcompare _ RBResize = GGT
-  gcompare RBPaste RBPaste = GEQ
-  gcompare RBPaste _ = GLT
-  gcompare _ RBPaste = GGT
-  -- gcompare RBFocus RBFocus = GEQ
-  -- gcompare RBFocus _ = GLT
-  -- gcompare _ RBFocus = GGT
-  gcompare (RBMouseDown b1) (RBMouseDown b2) =
-    case compare b1 b2 of
-      EQ -> GEQ
+  gcompare RBMouseDown{} _ = GLT
+  gcompare RBMouseUp{} RBVtyEvent{} = GGT
+  gcompare RBMouseUp{} RBMouseDown{} = GGT
+  gcompare (RBMouseUp a) (RBMouseUp b) =
+    case compare a b of
       LT -> GLT
-      GT -> GGT
-  gcompare (RBMouseDown _) _ = GLT
-  gcompare _ (RBMouseDown _) = GGT
-  gcompare (RBMouseUp mb1) (RBMouseUp mb2) =
-    case compare mb1 mb2 of
       EQ -> GEQ
-      LT -> GLT
       GT -> GGT
 
 instance GShow (RBEvent n e) where
   gshowsPrec _ RBAppEvent =
     showString "AppEvent"
-  gshowsPrec n (RBKey k) =
-    showString "Key " . showsPrec n k
-  gshowsPrec _ RBResize =
-    showString "Resize"
-  gshowsPrec _ RBPaste =
-    showString "Paste"
-  -- gshowsPrec _ RBFocus =
-  --   showString "Focus"
+  gshowsPrec _ RBAnyVtyEvent =
+    showString "AnyVtyEvent"
+  gshowsPrec n (RBVtyEvent a) =
+    showParen (n > 10) $
+    showString "VtyEvent " .
+    gshowsPrec (n+1) a
   gshowsPrec n (RBMouseDown b) =
     showString "MouseDown " . showsPrec n b
   gshowsPrec n (RBMouseUp mb) =
     showString "MouseUp " . showsPrec n mb
 
-brickEventToRBEvent :: BrickEvent n e -> DSum (RBEvent n e) Identity
+brickEventToRBEvent :: BrickEvent n e -> DMap (RBEvent n e) Identity
 brickEventToRBEvent be =
   case be of
     AppEvent e ->
-      RBAppEvent :=> Identity e
-    VtyEvent e -> case e of
-      EvKey k ms ->
-        RBKey k :=> Identity ms
-      EvResize x y ->
-        RBResize :=> Identity (Location (x, y))
-      EvPaste bs ->
-        RBPaste :=> Identity bs
-      -- EvGainedFocus ->
-      --   RBFocus :=> Identity True
-      -- EvLostFocus ->
-      --   RBFocus :=> Identity False
-      EvMouseDown _ _ _ _ ->
-        error "EvMouseDown should be handled by brick"
-      EvMouseUp _ _ _ ->
-        error "EvMouseUp should be handled by brick"
+      DMap.singleton RBAppEvent (pure e)
+    VtyEvent e ->
+      case e of
+        EvKey k ms ->
+          let
+            key = RBKey k
+            anyKey = RBAnyKey
+            anyVal = (k, ms)
+          in
+            DMap.fromList
+            [ RBVtyEvent anyKey ==> anyVal
+            , RBVtyEvent key ==> ms
+            , RBAnyVtyEvent ==>
+              DMap.fromList
+              [ anyKey ==> anyVal
+              , key ==> ms
+              ]
+            ]
+        EvResize x y ->
+          let
+            key = RBResize
+            val = Location (x, y)
+          in
+            DMap.fromList
+            [ RBVtyEvent key ==> val
+            , RBAnyVtyEvent ==> DMap.singleton key (pure val)
+            ]
+        EvPaste bs ->
+          let
+            key = RBPaste
+          in
+            DMap.fromList
+            [ RBVtyEvent key ==> bs
+            , RBAnyVtyEvent ==> DMap.singleton key (pure bs)
+            ]
+        -- EvGainedFocus ->
+        --   RBFocus :=> Identity True
+        -- EvLostFocus ->
+        --   RBFocus :=> Identity False
+        EvMouseDown _ _ _ _ ->
+          error "EvMouseDown should be handled by brick"
+        EvMouseUp _ _ _ ->
+          error "EvMouseUp should be handled by brick"
     MouseDown n b ms l ->
-      RBMouseDown b :=> Identity (MouseData n ms l)
+      DMap.singleton (RBMouseDown b) (pure $ MouseData n ms l)
     MouseUp n mb l ->
-      RBMouseUp mb :=> Identity (MouseData n [] l)
+      DMap.singleton (RBMouseUp mb) (pure $ MouseData n [] l)
