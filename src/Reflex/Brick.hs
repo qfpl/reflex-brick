@@ -33,8 +33,6 @@ import Brick.BChan (newBChan, writeBChan)
 
 import qualified Graphics.Vty as V
 
-import Data.Functor ((<&>))
-
 import Reflex.Brick.Types
 import Reflex.Brick.Events
 
@@ -112,6 +110,7 @@ runReflexBrickApp initial mGenE fn = do
 
     initialState <- sample $ current (rbaAppState rba)
     stateVar <- liftIO $ newTVarIO initialState
+    let (<&>) = flip fmap
     performEvent_ $
       updated (rbaAppState rba) <&> \s ->
       liftIO $ do
