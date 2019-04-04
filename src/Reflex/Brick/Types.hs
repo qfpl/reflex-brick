@@ -5,6 +5,7 @@ Maintainer  : dave.laing.80@gmail.com
 Stability   : experimental
 Portability : non-portable
 -}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Reflex.Brick.Types where
 
@@ -20,9 +21,9 @@ data RBNext s
 
 makePrisms ''RBNext
 
-data ReflexBrickAppState n =
-  ReflexBrickAppState {
-    _rbWidgets  :: [Widget n]
+data ReflexBrickAppState n
+  = ReflexBrickAppState
+  { _rbWidgets  :: [Widget n]
   , _rbCursorFn :: [CursorLocation n] -> Maybe (CursorLocation n)
   , _rbAttrMap  :: AttrMap
   }

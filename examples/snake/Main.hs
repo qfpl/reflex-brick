@@ -125,24 +125,24 @@ selectDirection :: Reflex t
                 => EventSelector t (RBEvent e n)
                 -> Event t Direction
 selectDirection es = leftmost
-  [ North <$ select es (RBKey V.KUp)
-  , East  <$ select es (RBKey V.KRight)
-  , South <$ select es (RBKey V.KDown)
-  , West  <$ select es (RBKey V.KLeft)
+  [ North <$ select es (RBVtyEvent $ RBKey V.KUp)
+  , East  <$ select es (RBVtyEvent $ RBKey V.KRight)
+  , South <$ select es (RBVtyEvent $ RBKey V.KDown)
+  , West  <$ select es (RBVtyEvent $ RBKey V.KLeft)
   ]
 
 selectRestart :: Reflex t
               => EventSelector t (RBEvent e n)
               -> Event t ()
 selectRestart es =
-  void . select es $ RBKey (V.KChar 'r')
+  void . select es $ (RBVtyEvent . RBKey $ V.KChar 'r')
 
 selectQuit :: Reflex t
            => EventSelector t (RBEvent e n)
            -> Event t ()
 selectQuit es = void . leftmost $
-  [ select es (RBKey (V.KChar 'q'))
-  , select es (RBKey V.KEsc)
+  [ select es (RBVtyEvent . RBKey $ V.KChar 'q')
+  , select es (RBVtyEvent $ RBKey V.KEsc)
   ]
 
 genCoord :: MonadIO m => m Coord
@@ -311,7 +311,7 @@ isDead es eTick = Workflow $ do
 main :: IO ()
 main = do
   initialState <- mkInitialState
-  runReflexBrickApp @() (pure ()) Nothing $ \es -> do
+  runReflexBrickApp @() (pure ()) $ \es -> do
     (eTick, runTick) <- newTriggerEvent
     let
       ticking = do
