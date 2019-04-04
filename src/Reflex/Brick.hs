@@ -89,22 +89,16 @@ rbEventSelector = fan . fmap brickEventToRBEvent
 runReflexBrickApp ::
   Ord n =>
   EventM n e -> -- ^ An initial action to perform
-  Maybe (IO e) -> -- ^ An action which provides values for the custom event
   (forall t m.
    (BasicGuestConstraints t m) =>
    EventSelector t (RBEvent n e) ->
    BasicGuest t m (ReflexBrickApp t n)) -> -- ^ The FRP network for the application
   IO ()
-runReflexBrickApp initial mGenE fn = do
+runReflexBrickApp initial fn = do
   basicHostWithQuit $ do
     (eQuit, onQuit) <- newTriggerEvent
     (eEventIn, onEventIn) <- newTriggerEvent
     bChan <- liftIO $ newBChan 1
-    case mGenE of
-      Nothing -> pure ()
-      Just genE -> do
-        e <- liftIO genE
-        liftIO . writeBChan bChan $ Right e
 
     rba <- fn (rbEventSelector eEventIn)
 

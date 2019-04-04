@@ -311,7 +311,7 @@ isDead es eTick = Workflow $ do
 main :: IO ()
 main = do
   initialState <- mkInitialState
-  runReflexBrickApp @() (pure ()) Nothing $ \es -> do
+  runReflexBrickApp @() (pure ()) $ \es -> do
     (eTick, runTick) <- newTriggerEvent
     let
       ticking = do
