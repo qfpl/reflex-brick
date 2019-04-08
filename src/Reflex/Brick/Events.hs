@@ -7,12 +7,13 @@ Portability : non-portable
 -}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Reflex.Brick.Events (
-    RBEvent(..)
-  , RBVtyEvent(..)
+module Reflex.Brick.Events
+  ( RBEvent(..)
+  , RBKey(..)
   , MouseData(..)
   , brickEventToRBEvent
-  ) where
+  )
+where
 
 import Data.Functor.Identity (Identity(..))
 
@@ -20,7 +21,7 @@ import Brick.Types (BrickEvent(..), Location(..))
 import Graphics.Vty.Input.Events
 
 import Data.Dependent.Map (DMap)
-import Data.Dependent.Sum (DSum, (==>))
+import Data.Dependent.Sum ((==>))
 import Data.GADT.Compare (GEq(..), GCompare(..), GOrdering(..), (:~:)(..))
 import Data.GADT.Compare.TH (deriveGEq, deriveGCompare)
 import Data.GADT.Show (GShow(..))
@@ -38,20 +39,43 @@ data MouseData n =
   , _mdLocation :: Location
   }
 
-data RBVtyEvent a where
-  RBAnyKey :: RBVtyEvent (Key, [Modifier])
-  RBKey :: Key -> RBVtyEvent [Modifier]
-  RBResize :: RBVtyEvent Location
-  RBPaste :: RBVtyEvent ByteString
-
-deriveGEq ''RBVtyEvent
-deriveGCompare ''RBVtyEvent
-deriveGShow ''RBVtyEvent
+data RBKey a where
+  RBEsc :: RBKey ()
+  RBAnyChar :: RBKey Char
+  RBChar :: Char -> RBKey ()
+  RBBS :: RBKey ()
+  RBEnter :: RBKey ()
+  RBLeft :: RBKey ()
+  RBRight :: RBKey ()
+  RBUp :: RBKey ()
+  RBDown :: RBKey ()
+  RBUpLeft :: RBKey ()
+  RBUpRight :: RBKey ()
+  RBDownLeft :: RBKey ()
+  RBDownRight :: RBKey ()
+  RBCenter :: RBKey ()
+  RBAnyFun :: RBKey Int
+  RBFun :: Int -> RBKey ()
+  RBBackTab :: RBKey ()
+  RBPrtScr :: RBKey ()
+  RBPause :: RBKey ()
+  RBIns :: RBKey ()
+  RBHome :: RBKey ()
+  RBPageUp :: RBKey ()
+  RBDel :: RBKey ()
+  RBEnd :: RBKey ()
+  RBPageDown :: RBKey ()
+  RBBegin :: RBKey ()
+  RBMenu :: RBKey ()
+deriveGEq ''RBKey
+deriveGCompare ''RBKey
+deriveGShow ''RBKey
 
 data RBEvent n e a where
   RBAppEvent :: RBEvent n e e
-  RBAnyVtyEvent :: RBEvent n e (DMap RBVtyEvent Identity)
-  RBVtyEvent :: RBVtyEvent a -> RBEvent n e a
+  RBKey :: RBEvent n e ([Modifier], DMap RBKey Identity)
+  RBResize :: RBEvent n e Location
+  RBPaste :: RBEvent n e ByteString
   RBMouseDown :: Button -> RBEvent n e (MouseData n)
   RBMouseUp :: Maybe Button -> RBEvent n e (MouseData n)
   -- RBFocus :: RBEvent n e Bool
@@ -59,8 +83,9 @@ data RBEvent n e a where
 instance GEq (RBEvent n e) where
   geq RBAppEvent RBAppEvent =
     Just Refl
-  geq RBAnyVtyEvent RBAnyVtyEvent = Just Refl
-  geq (RBVtyEvent a) (RBVtyEvent b) = geq a b
+  geq RBKey RBKey = Just Refl
+  geq RBResize RBResize = Just Refl
+  geq RBPaste RBPaste = Just Refl
   geq (RBMouseDown b1) (RBMouseDown b2) =
     if b1 == b2 then Just Refl else Nothing
   geq (RBMouseUp mb1) (RBMouseUp mb2) =
@@ -72,20 +97,22 @@ instance GCompare (RBEvent n e) where
   gcompare RBAppEvent RBAppEvent = GEQ
   gcompare RBAppEvent _ = GLT
   gcompare _ RBAppEvent = GGT
-  gcompare RBAnyVtyEvent RBAnyVtyEvent = GEQ
-  gcompare RBAnyVtyEvent _ = GLT
-  gcompare _ RBAnyVtyEvent = GGT
-  gcompare (RBVtyEvent a) (RBVtyEvent b) = gcompare a b
-  gcompare RBVtyEvent{} _ = GLT
-  gcompare RBMouseDown{} RBVtyEvent{} = GGT
+  gcompare RBKey RBKey = GEQ
+  gcompare RBKey _ = GLT
+  gcompare _ RBKey = GGT
+  gcompare RBResize RBResize = GEQ
+  gcompare RBResize _ = GLT
+  gcompare _ RBResize = GGT
+  gcompare RBPaste RBPaste = GEQ
+  gcompare RBPaste _ = GLT
+  gcompare _ RBPaste = GGT
   gcompare (RBMouseDown a) (RBMouseDown b) =
     case compare a b of
       LT -> GLT
       EQ -> GEQ
       GT -> GGT
   gcompare RBMouseDown{} _ = GLT
-  gcompare RBMouseUp{} RBVtyEvent{} = GGT
-  gcompare RBMouseUp{} RBMouseDown{} = GGT
+  gcompare _ RBMouseDown{} = GGT
   gcompare (RBMouseUp a) (RBMouseUp b) =
     case compare a b of
       LT -> GLT
@@ -95,16 +122,45 @@ instance GCompare (RBEvent n e) where
 instance GShow (RBEvent n e) where
   gshowsPrec _ RBAppEvent =
     showString "AppEvent"
-  gshowsPrec _ RBAnyVtyEvent =
-    showString "AnyVtyEvent"
-  gshowsPrec n (RBVtyEvent a) =
-    showParen (n > 10) $
-    showString "VtyEvent " .
-    gshowsPrec (n+1) a
+  gshowsPrec _ RBKey =
+    showString "Key"
+  gshowsPrec _ RBResize =
+    showString "Resize"
+  gshowsPrec _ RBPaste =
+    showString "Paste"
   gshowsPrec n (RBMouseDown b) =
     showString "MouseDown " . showsPrec n b
   gshowsPrec n (RBMouseUp mb) =
     showString "MouseUp " . showsPrec n mb
+
+keyToRBKey :: Key -> DMap RBKey Identity
+keyToRBKey k =
+  case k of
+    KEsc -> DMap.singleton RBEsc $ pure ()
+    KChar c -> DMap.fromList [RBAnyChar ==> c, RBChar c ==> ()]
+    KBS -> DMap.singleton RBBS $ pure ()
+    KEnter -> DMap.singleton RBEnter $ pure ()
+    KLeft -> DMap.singleton RBLeft $ pure ()
+    KRight -> DMap.singleton RBRight $ pure ()
+    KUp -> DMap.singleton RBUp $ pure ()
+    KDown -> DMap.singleton RBDown $ pure ()
+    KUpLeft -> DMap.singleton RBUpLeft $ pure ()
+    KUpRight -> DMap.singleton RBUpRight $ pure ()
+    KDownLeft -> DMap.singleton RBDownLeft $ pure ()
+    KDownRight -> DMap.singleton RBDownRight $ pure ()
+    KCenter -> DMap.singleton RBCenter $ pure ()
+    KFun n -> DMap.fromList [RBAnyFun ==> n, RBFun n ==> ()]
+    KBackTab -> DMap.singleton RBBackTab $ pure ()
+    KPrtScr -> DMap.singleton RBPrtScr $ pure ()
+    KPause -> DMap.singleton RBPause $ pure ()
+    KIns -> DMap.singleton RBIns $ pure ()
+    KHome -> DMap.singleton RBHome $ pure ()
+    KPageUp -> DMap.singleton RBPageUp $ pure ()
+    KDel -> DMap.singleton RBDel $ pure ()
+    KEnd -> DMap.singleton RBEnd $ pure ()
+    KPageDown -> DMap.singleton RBPageDown $ pure ()
+    KBegin -> DMap.singleton RBBegin $ pure ()
+    KMenu -> DMap.singleton RBMenu $ pure ()
 
 brickEventToRBEvent :: BrickEvent n e -> DMap (RBEvent n e) Identity
 brickEventToRBEvent be =
@@ -114,37 +170,11 @@ brickEventToRBEvent be =
     VtyEvent e ->
       case e of
         EvKey k ms ->
-          let
-            key = RBKey k
-            anyKey = RBAnyKey
-            anyVal = (k, ms)
-          in
-            DMap.fromList
-            [ RBVtyEvent anyKey ==> anyVal
-            , RBVtyEvent key ==> ms
-            , RBAnyVtyEvent ==>
-              DMap.fromList
-              [ anyKey ==> anyVal
-              , key ==> ms
-              ]
-            ]
+          DMap.singleton RBKey $ pure (ms, keyToRBKey k)
         EvResize x y ->
-          let
-            key = RBResize
-            val = Location (x, y)
-          in
-            DMap.fromList
-            [ RBVtyEvent key ==> val
-            , RBAnyVtyEvent ==> DMap.singleton key (pure val)
-            ]
+          DMap.singleton RBResize . pure $ Location (x, y)
         EvPaste bs ->
-          let
-            key = RBPaste
-          in
-            DMap.fromList
-            [ RBVtyEvent key ==> bs
-            , RBAnyVtyEvent ==> DMap.singleton key (pure bs)
-            ]
+          DMap.singleton RBPaste $ pure bs
         -- EvGainedFocus ->
         --   RBFocus :=> Identity True
         -- EvLostFocus ->

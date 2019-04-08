@@ -46,9 +46,10 @@ myStateToAppState (MyState c) =
 main :: IO ()
 main =
   runReflexBrickApp @() (pure ()) $ \es -> do
+    let keyES = fan $ snd <$> select es RBKey
     (eTick, runTick) <- newTriggerEvent
 
-    let eQuit = select es $ RBVtyEvent (RBKey $ V.KChar 'q')
+    let eQuit = select keyES $ RBChar 'q'
 
     dState <-
       foldDyn ($) (MyState 0) $

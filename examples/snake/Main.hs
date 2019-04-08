@@ -122,27 +122,27 @@ renderState :: OutputState -> ReflexBrickAppState Name
 renderState os = ReflexBrickAppState (drawUI os) (const Nothing) theMap
 
 selectDirection :: Reflex t
-                => EventSelector t (RBEvent e n)
+                => EventSelector t RBKey
                 -> Event t Direction
 selectDirection es = leftmost
-  [ North <$ select es (RBVtyEvent $ RBKey V.KUp)
-  , East  <$ select es (RBVtyEvent $ RBKey V.KRight)
-  , South <$ select es (RBVtyEvent $ RBKey V.KDown)
-  , West  <$ select es (RBVtyEvent $ RBKey V.KLeft)
+  [ North <$ select es RBUp
+  , East  <$ select es RBRight
+  , South <$ select es RBDown
+  , West  <$ select es RBLeft
   ]
 
 selectRestart :: Reflex t
-              => EventSelector t (RBEvent e n)
+              => EventSelector t RBKey
               -> Event t ()
 selectRestart es =
-  void . select es $ (RBVtyEvent . RBKey $ V.KChar 'r')
+  void . select es $ RBChar 'r'
 
 selectQuit :: Reflex t
-           => EventSelector t (RBEvent e n)
+           => EventSelector t RBKey
            -> Event t ()
 selectQuit es = void . leftmost $
-  [ select es (RBVtyEvent . RBKey $ V.KChar 'q')
-  , select es (RBVtyEvent $ RBKey V.KEsc)
+  [ select es $ RBChar 'q'
+  , select es RBEsc
   ]
 
 genCoord :: MonadIO m => m Coord
@@ -260,7 +260,7 @@ mkDead dPos dTail =
 
 isAlive ::
   (Reflex t, MonadHold t m, MonadFix m, PerformEvent t m, MonadIO (Performable m), MonadIO m) =>
-  EventSelector t (RBEvent Name ()) ->
+  EventSelector t RBKey ->
   Event t () -> -- ^ Tick event
   OutputState ->
   Workflow t m (ReflexBrickApp t Name)
@@ -295,7 +295,7 @@ isAlive es eTick initialState = Workflow $ do
 
 isDead ::
   (Reflex t, MonadHold t m, MonadFix m, PerformEvent t m, MonadIO (Performable m), MonadIO m) =>
-  EventSelector t (RBEvent Name ()) ->
+  EventSelector t RBKey ->
   Event t () ->
   Workflow t m (ReflexBrickApp t Name)
 isDead es eTick = Workflow $ do
@@ -312,6 +312,7 @@ main :: IO ()
 main = do
   initialState <- mkInitialState
   runReflexBrickApp @() (pure ()) $ \es -> do
+    let keyES = fan $ snd <$> select es RBKey
     (eTick, runTick) <- newTriggerEvent
     let
       ticking = do
@@ -319,4 +320,4 @@ main = do
         threadDelay 300000
         ticking
     _ <- liftIO $ forkIO ticking
-    switchReflexBrickApp <$> workflow (isAlive es eTick initialState)
+    switchReflexBrickApp <$> workflow (isAlive keyES eTick initialState)
