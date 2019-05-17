@@ -1,7 +1,7 @@
 { nixpkgs ? import <nixpkgs> {}
 , compiler ? "ghc"
 , local-basic-host ? true
-} : 
+} :
 let
   inherit (nixpkgs) pkgs;
   reflex-platform = import ./nix/reflex-platform.nix;
