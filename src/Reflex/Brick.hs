@@ -86,14 +86,13 @@ switchReflexBrickApp d =
 rbEventSelector :: Reflex t => Event t (BrickEvent n e) -> EventSelector t (RBEvent n e)
 rbEventSelector = fan . fmap brickEventToRBEvent
 
-runReflexBrickApp ::
-  Ord n =>
-  EventM n e -> -- ^ An initial action to perform
-  (forall t m.
-   (BasicGuestConstraints t m) =>
-   EventSelector t (RBEvent n e) ->
-   BasicGuest t m (ReflexBrickApp t n)) -> -- ^ The FRP network for the application
-  IO ()
+runReflexBrickApp :: Ord n
+                  => EventM n e -- ^ An initial action to perform
+                  -> ( forall t m. (BasicGuestConstraints t m)
+                     => EventSelector t (RBEvent n e)
+                     -> BasicGuest t m (ReflexBrickApp t n)
+                     ) -- ^ The FRP network for the application
+                  -> IO ()
 runReflexBrickApp initial fn = do
   basicHostWithQuit $ do
     (eQuit, onQuit) <- newTriggerEvent
