@@ -125,4 +125,4 @@ runReflexBrickApp initial fn = do
     performEvent_ $
       liftIO . writeBChan bChan . Left . RBSuspendAndResume <$> rbaSuspendAndResume rba
 
-    pure ((), eQuit)
+    pure eQuit
